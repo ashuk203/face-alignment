@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+import numpy as np
+import random
 import math
 
 
@@ -176,7 +179,6 @@ class FAN(nn.Module):
         x = F.avg_pool2d(self.conv2(x), 2, stride=2)
         x = self.conv3(x)
         x = self.conv4(x)
-
         previous = x
 
         outputs = []
@@ -197,6 +199,22 @@ class FAN(nn.Module):
                 ll = self._modules['bl' + str(i)](ll)
                 tmp_out_ = self._modules['al' + str(i)](tmp_out)
                 previous = previous + ll + tmp_out_
+
+
+
+
+        final_outs = outputs[-1][0]
+        # feature_starts = [0, 17, 22, 27, 31, 36, 42, 48, 60]
+        feature_starts = []
+
+        # print(final_outs[0])
+
+        for f_start in feature_starts:
+            for i in range(5):
+                plt.figure()
+                plt.imshow(final_outs[f_start + i])
+                print(np.sum(final_outs[f_start + i].numpy()))
+
 
         return outputs
 

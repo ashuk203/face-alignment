@@ -2,6 +2,7 @@ from __future__ import print_function
 import os
 import torch
 from torch.utils.model_zoo import load_url
+from torch.autograd import Variable
 from enum import Enum
 from skimage import io
 from skimage import color
@@ -53,6 +54,8 @@ models_urls = {
 class FaceAlignment:
     def __init__(self, landmarks_type, network_size=NetworkSize.LARGE,
                  device='cuda', flip_input=False, face_detector='sfd', verbose=False):
+
+        print("Entering face_alignment... ")
         self.device = device
         self.flip_input = flip_input
         self.landmarks_type = landmarks_type
@@ -94,6 +97,8 @@ class FaceAlignment:
             self.depth_prediciton_net.to(device)
             self.depth_prediciton_net.eval()
 
+        print("Done loading models")
+
     def get_landmarks(self, image_or_path, detected_faces=None):
         """Deprecated, please use get_landmarks_from_image
 
@@ -106,7 +111,7 @@ class FaceAlignment:
         """
         return self.get_landmarks_from_image(image_or_path, detected_faces)
 
-    @torch.no_grad()
+    # @torch.no_grad()
     def get_landmarks_from_image(self, image_or_path, detected_faces=None):
         """Predict the landmarks for each face present in the image.
 
@@ -142,8 +147,14 @@ class FaceAlignment:
         if len(detected_faces) == 0:
             print("Warning: No faces were detected.")
             return None
+        else:
+            # print("This is what a detected face looks like: ", detected_faces[0])
+            # print("Detected " + str(len(detected_faces)) + " faces")
+            pass
 
         landmarks = []
+        inps = []
+        outs = []
         for i, d in enumerate(detected_faces):
             center = torch.FloatTensor(
                 [d[2] - (d[2] - d[0]) / 2.0, d[3] - (d[3] - d[1]) / 2.0])
@@ -156,12 +167,19 @@ class FaceAlignment:
 
             inp = inp.to(self.device)
             inp.div_(255.0).unsqueeze_(0)
+            inp.requires_grad = True
+            # inp = Variable(inp.data, requires_grad=True)
 
-            out = self.face_alignment_net(inp)[-1].detach()
+            print("Running forward on face alignment net")
+            out = self.face_alignment_net(inp)[-1]
             if self.flip_input:
                 out += flip(self.face_alignment_net(flip(inp))
                             [-1].detach(), is_label=True)
             out = out.cpu()
+
+            # print("Hey, here's our results??")
+            # print(type(out))
+            # print(out.shape)
 
             pts, pts_img = get_preds_fromhm(out, center, scale)
             pts, pts_img = pts.view(68, 2) * 4, pts_img.view(68, 2)
@@ -182,8 +200,10 @@ class FaceAlignment:
                     (pts_img, depth_pred * (1.0 / (256.0 / (200.0 * scale)))), 1)
 
             landmarks.append(pts_img.numpy())
+            inps.append(inp)
+            outs.append(out)
 
-        return landmarks
+        return landmarks, detected_faces, inps[-1], outs[-1]
 
     @torch.no_grad()
     def get_landmarks_from_batch(self, image_batch, detected_faces=None):
@@ -233,6 +253,7 @@ class FaceAlignment:
                     out += flip(self.face_alignment_net(flip(inp))
                                 [-1].detach(), is_label=True)  # patched inp_batch undefined variable error
                 out = out.cpu()
+
                 pts, pts_img = get_preds_fromhm(out, center, scale)
 
                 # Added 3D landmark support
